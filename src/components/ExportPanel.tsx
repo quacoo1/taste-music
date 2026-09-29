@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AppConfig, Playlist, PlaylistTrack } from "../../shared/types.ts";
 import { clock } from "../lib/format.ts";
 import { OAUTH_RESUME_KEY } from "../lib/oauth.ts";
-import { completeSpotifyAuth, exportToSpotify, type ExportProgress } from "../lib/spotify.ts";
+import { completeSpotifyAuth, exportToSpotify, SpotifyNotAllowed, type ExportProgress } from "../lib/spotify.ts";
 import { load, remove } from "../lib/storage.ts";
 import { loadGoogleIdentity, quickLink, requestGoogleToken, saveToYoutubeLibrary } from "../lib/youtube.ts";
 import { CheckIcon, CopyIcon, DownloadIcon, ExternalIcon, SpotifyMark, YouTubeMusicMark } from "./Icons.tsx";
@@ -12,7 +12,7 @@ type Job =
   | { status: "idle" }
   | { status: "busy"; label: string; pct?: number }
   | { status: "done"; url: string; label: string; added: number; missing: PlaylistTrack[]; alt?: { url: string; label: string } }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; fix?: { label: string; run: () => void } };
 
 const idle: Job = { status: "idle" };
 
@@ -61,7 +61,12 @@ export function ExportPanel({ playlist, config, cover, onSetup }: Props) {
       );
       setSpotify({ status: "done", url: result.url, label: "Open in Spotify", added: result.added, missing: result.missing });
     } catch (err) {
-      setSpotify({ status: "error", message: (err as Error).message });
+      setSpotify({
+        status: "error",
+        message: (err as Error).message,
+        // Not on the app's allowlist: the way forward is their own app, not a retry.
+        fix: err instanceof SpotifyNotAllowed ? { label: "Use my own Spotify app", run: () => onSetup("spotify") } : undefined,
+      });
     }
   };
 
@@ -228,9 +233,16 @@ function JobView({ job, action, onRetry, compact }: { job: Job; action: ReactNod
     return (
       <div className="job error" role="alert">
         <p>{job.message}</p>
-        <button className="btn ghost" onClick={onRetry}>
-          Try again
-        </button>
+        <div className="job-actions">
+          {job.fix && (
+            <button className="btn dark" onClick={job.fix.run}>
+              {job.fix.label}
+            </button>
+          )}
+          <button className="btn ghost" onClick={onRetry}>
+            Try again
+          </button>
+        </div>
       </div>
     );
   return (

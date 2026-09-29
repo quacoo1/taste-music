@@ -11,7 +11,15 @@ interface Token {
   access_token: string;
   refresh_token?: string;
   expires_at: number;
+  /** The app that issued it; switching apps needs a fresh sign-in. */
+  client_id?: string;
 }
+
+/** The session or the app can't be used; every further request would fail the same way. */
+class SpotifyAccessError extends Error {}
+
+/** Spotify signed the user in but the app isn't allowed to act for them (Development Mode allowlist). */
+export class SpotifyNotAllowed extends SpotifyAccessError {}
 
 export const spotifyRedirectUri = () => `${window.location.origin}/callback`;
 
@@ -27,6 +35,7 @@ async function tokenRequest(clientId: string, body: Record<string, string>): Pro
     access_token: data.access_token,
     refresh_token: data.refresh_token ?? body.refresh_token,
     expires_at: Date.now() + (data.expires_in - 60) * 1000,
+    client_id: clientId,
   };
   save(TOKEN_KEY, token);
   return token;
@@ -47,7 +56,11 @@ export async function completeSpotifyAuth(clientId: string, params: URLSearchPar
 }
 
 async function getToken(clientId: string, resumePlaylistId: string): Promise<Token> {
-  const saved = load<Token | null>(TOKEN_KEY, null);
+  let saved = load<Token | null>(TOKEN_KEY, null);
+  if (saved && saved.client_id !== clientId) {
+    remove(TOKEN_KEY);
+    saved = null;
+  }
   if (saved && saved.expires_at > Date.now()) return saved;
   if (saved?.refresh_token) {
     try {
@@ -90,11 +103,11 @@ async function api(token: Token, path: string, init: RequestInit = {}, attempt =
   }
   if (res.status === 401) {
     remove(TOKEN_KEY);
-    throw new Error("Spotify session expired — try again to reconnect.");
+    throw new SpotifyAccessError("Spotify session expired — try again to reconnect.");
   }
   if (res.status === 403) {
-    throw new Error(
-      "Spotify refused the request. Apps in Development Mode only work for accounts added under User Management in the Spotify dashboard.",
+    throw new SpotifyNotAllowed(
+      "Spotify didn't let this app save for your account. Apps in Development Mode only work for accounts the app's owner added under User Management. Ask them to add you, or use your own free Spotify app.",
     );
   }
   if (!res.ok) {
@@ -152,15 +165,21 @@ export async function exportToSpotify(
   let done = 0;
   onProgress({ phase: "match", done, total });
   let cursor = 0;
+  let fatal: SpotifyAccessError | null = null;
   await Promise.all(
     Array.from({ length: 3 }, async () => {
-      while (cursor < total) {
+      while (cursor < total && !fatal) {
         const i = cursor++;
-        uris[i] = await findUri(token, playlist.tracks[i]).catch(() => null);
+        uris[i] = await findUri(token, playlist.tracks[i]).catch((err) => {
+          // Access problems hit every song; report them instead of "not found".
+          if (err instanceof SpotifyAccessError) fatal ??= err;
+          return null;
+        });
         onProgress({ phase: "match", done: ++done, total });
       }
     }),
   );
+  if (fatal) throw fatal;
   const found = uris.filter((u): u is string => !!u);
   if (!found.length) throw new Error("None of the songs could be found on Spotify.");
 

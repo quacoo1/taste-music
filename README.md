@@ -34,7 +34,7 @@ The build (`npm run build:vercel`) writes Vercel's [Build Output API](https://ve
 
 After the first production deploy, use your production domain for the export integrations. Preview URLs change on every deploy. Anyone who connects Spotify registers `https://<your-domain>/callback`; anyone who connects Google registers `https://<your-domain>` as the JavaScript origin. The app shows the exact values in its setup sheets.
 
-Optional: set `SPOTIFY_CLIENT_ID` and/or `GOOGLE_CLIENT_ID` in the Vercel project to give every visitor a default app. Visitors can still paste their own client ID, which overrides it.
+Optional: set `SPOTIFY_CLIENT_ID` and/or `GOOGLE_CLIENT_ID` in the Vercel project to give every visitor one-click sign-in with your app. Visitors can still paste their own client ID, which overrides it. Spotify caps a new app at five approved accounts (see [Spotify](#spotify)).
 
 ## Privacy model
 
@@ -117,11 +117,11 @@ Songs are matched without spending API quota. Writing the playlist costs about 5
 1. Create an app at <https://developer.spotify.com/dashboard> and choose **Web API**.
 2. Add `https://<your-domain>/callback` as a Redirect URI.
 3. Add your Spotify account under **User Management**.
-4. Paste the Client ID into the app.
+4. Either paste the Client ID into the app (just for you), or set it as `SPOTIFY_CLIENT_ID` in the Vercel project and redeploy. With the variable set, every visitor gets a one-click **Save to Spotify** that goes straight to Spotify's sign-in, with no setup sheet.
 
 Taste signs in with PKCE entirely in the browser, so no client secret is needed. It creates a private playlist, adds the songs in order and uploads the generated flower cover as the playlist image.
 
-Spotify limits new apps to **Development Mode**: the app owner needs Premium, and only a handful of allowlisted users can sign in. That's why every visitor can bring their own client ID instead of sharing yours.
+Spotify limits new apps to **Development Mode**: the app owner needs Premium, and only **five** accounts added under User Management can use the app. Anyone else can sign in, but Spotify then refuses to save for them. Taste explains why and offers **Use my own Spotify app**, which opens the bring-your-own setup. Opening the app to everyone needs Spotify's Extended Quota Mode, which is only granted to registered businesses with at least 250k monthly active users.
 
 Every export shows which songs couldn't be matched. **Copy track list** and **Download CSV** work anywhere.
 
